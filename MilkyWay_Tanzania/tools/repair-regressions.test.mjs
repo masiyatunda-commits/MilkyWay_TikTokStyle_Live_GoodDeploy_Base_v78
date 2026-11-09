@@ -26,7 +26,7 @@ test.skip('MilkyWay LIVE stage uses the brand logo watermark and responsive stag
 
 
 
-test('Android workflow builds and publishes a debug Capacitor APK', () => {
+test('Android workflow builds and publishes a signed Capacitor release APK', () => {
   const config = JSON.parse(source('capacitor.config.json'));
   const version = JSON.parse(source('milkyway/download/version.json'));
   const workflow = source('.github/workflows/android-apk.yml');
@@ -37,15 +37,22 @@ test('Android workflow builds and publishes a debug Capacitor APK', () => {
   assert.ok(Number.isInteger(version.versionCode) && version.versionCode >= 7);
   assert.match(start, /location\.replace\('https:\/\/www\.masiyatunda\.com\/milkyway\/'\)/);
   assert.match(workflow, /npx cap add android/);
-  assert.match(workflow, /assembleDebug/);
-  assert.match(workflow, /app-debug\.apk/);
-  assert.doesNotMatch(workflow, /ANDROID_RELEASE_KEYSTORE_BASE64|ANDROID_RELEASE_STORE_PASSWORD/);
+  assert.match(workflow, /assembleRelease/);
+  assert.match(workflow, /app-release\.apk/);
+  assert.match(workflow, /secrets\.ANDROID_RELEASE_KEYSTORE_BASE64/);
+  assert.match(workflow, /secrets\.ANDROID_RELEASE_STORE_PASSWORD/);
+  assert.match(workflow, /secrets\.ANDROID_RELEASE_KEY_ALIAS/);
+  assert.match(workflow, /secrets\.ANDROID_RELEASE_KEY_PASSWORD/);
+  assert.match(workflow, /base64 --decode/);
+  assert.match(workflow, /contents: write/);
   assert.match(workflow, /milkyway\/download\/MilkyWay\.apk/);
   assert.match(workflow, /git push/);
   assert.match(prepare, /MilkyWayNativePlugin/);
   assert.match(prepare, /androidx\.activity:activity/);
   assert.match(prepare, /com\.google\.firebase:firebase-messaging/);
   assert.match(prepare, /ANDROID_RELEASE_VERSION_CODE/);
+  assert.match(prepare, /signingConfigs/);
+  assert.match(prepare, /ANDROID_RELEASE_KEYSTORE_PATH/);
   assert.match(publishVersion, /metadata\.versionCode = versionCode/);
 });
 

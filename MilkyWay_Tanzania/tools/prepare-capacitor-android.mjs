@@ -9,12 +9,22 @@ const config = JSON.parse(readFileSync('capacitor.config.json', 'utf8'));
 const version = JSON.parse(readFileSync('milkyway/download/version.json', 'utf8'));
 const buildVersionCode = Number(process.env.ANDROID_RELEASE_VERSION_CODE);
 const buildVersionName = process.env.ANDROID_RELEASE_VERSION_NAME;
+const signingEnvironment = [
+  'ANDROID_RELEASE_KEYSTORE_PATH',
+  'ANDROID_RELEASE_STORE_PASSWORD',
+  'ANDROID_RELEASE_KEY_ALIAS',
+  'ANDROID_RELEASE_KEY_PASSWORD',
+];
+const signingConfigured = signingEnvironment.some(name => process.env[name]);
 
 if (config.android?.path !== 'android/capacitor') {
   throw new Error('Capacitor Android path must be android/capacitor.');
 }
 if (!Number.isInteger(buildVersionCode) || buildVersionCode <= version.versionCode || !buildVersionName) {
   throw new Error('Android release version must be newer than the currently published APK.');
+}
+if (signingConfigured && signingEnvironment.some(name => !process.env[name])) {
+  throw new Error('All Android release signing environment variables must be configured.');
 }
 
 const gradle = readFileSync(buildFile, 'utf8');
@@ -40,6 +50,26 @@ if (!updatedGradle.includes('com.google.firebase:firebase-messaging')) {
   if (dependenciesIndex < 0) throw new Error('Generated Android app has no dependencies block.');
   const insertionPoint = dependenciesIndex + 'dependencies {'.length;
   updatedGradle = `${updatedGradle.slice(0, insertionPoint)}\n    implementation 'com.google.firebase:firebase-messaging:25.0.1'${updatedGradle.slice(insertionPoint)}`;
+}
+if (signingConfigured) {
+  const buildTypesIndex = updatedGradle.indexOf('    buildTypes {');
+  if (buildTypesIndex < 0) throw new Error('Generated Android app has no buildTypes block.');
+  updatedGradle = `${updatedGradle.slice(0, buildTypesIndex)}    signingConfigs {
+        release {
+            storeFile file(System.getenv('ANDROID_RELEASE_KEYSTORE_PATH'))
+            storePassword System.getenv('ANDROID_RELEASE_STORE_PASSWORD')
+            keyAlias System.getenv('ANDROID_RELEASE_KEY_ALIAS')
+            keyPassword System.getenv('ANDROID_RELEASE_KEY_PASSWORD')
+        }
+    }
+
+${updatedGradle.slice(buildTypesIndex)}`;
+  const updatedBuildTypesIndex = updatedGradle.indexOf('    buildTypes {');
+  const releaseBuildType = updatedGradle.indexOf('        release {', updatedBuildTypesIndex);
+  if (releaseBuildType < 0) throw new Error('Generated Android app has no release build type.');
+  const releaseConfigStart = releaseBuildType + '        release {'.length;
+  updatedGradle = `${updatedGradle.slice(0, releaseConfigStart)}
+            signingConfig signingConfigs.release${updatedGradle.slice(releaseConfigStart)}`;
 }
 writeFileSync(buildFile, updatedGradle);
 
